@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="ht">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DGCEL ACADÉMIE</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0b5ed7">
+<style>
+:root{--p:#0b5ed7;--bg:#f4f6fb;--c:#fff;--t:#1b2430;--m:#6b7785}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,sans-serif;background:var(--bg);color:var(--t)}
+header{background:var(--p);color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0}
+header b{font-size:18px}
+nav{display:flex;gap:6px;flex-wrap:wrap;padding:8px 12px;background:#fff;border-bottom:1px solid #e3e8f0}
+nav a,button,.btn{background:var(--p);color:#fff;border:0;border-radius:8px;padding:9px 14px;font-size:15px;text-decoration:none;cursor:pointer}
+nav a{background:#eaf1ff;color:var(--p)}
+button.alt{background:#eaf1ff;color:var(--p)}
+main{max-width:720px;margin:0 auto;padding:14px}
+.card{background:var(--c);border-radius:12px;padding:14px;margin-bottom:12px;box-shadow:0 1px 3px #0001}
+input,textarea{width:100%;padding:11px;margin:5px 0 10px;border:1px solid #cfd8e3;border-radius:8px;font-size:16px}
+.m{color:var(--m);font-size:14px}
+.pill{display:inline-block;padding:2px 9px;border-radius:99px;background:#eaf1ff;color:var(--p);font-size:13px}
+.dip{border:8px double #b8860b;background:#fffdf5;text-align:center;padding:30px 16px}
+.dip h1{font-family:Georgia,serif;color:#8a6508}
+@media print{header,nav,.noprint{display:none!important}body{background:#fff}}
+</style>
+</head>
+<body>
+<header><b>🎓 DGCEL ACADÉMIE</b><span id="who" class="m" style="color:#fff"></span></header>
+<nav id="nav"></nav>
+<main id="app">Chajman...</main>
+
+<script type="module">
+/* ====== 1. METE KONFIGIRASYON OU HI ====== */
+const firebaseConfig = {
+  apiKey: "AIzaSyCrCt_MfpNpnVLIWcIGTYSoZKewqOtGeZU",
+  authDomain: "dgcel-acad-2026.firebaseapp.com",
+  projectId: "dgcel-acad-2026",
+  storageBucket: "dgcel-acad-2026.firebasestorage.app",
+  messagingSenderId: "415020124018",
+  appId: "1:415020124018:web:fe6aaaffd8ff21dc64ffeb"
+};
+const PEMAN = "Peye ak NatCash: voye montan kou a sou nimewo 509 3599 6549 (DGCEL). Apre sa, antre nimewo tranzaksyon an anba a.";
+const TO_KOMISYON_DEFO = 30; // % si kou a pa gen chan "commission"
+const MIN_RETRE = 500; // minimòm retrè an HTG
+/* ========================================= */
+
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import {getAuth,onAuthStateChanged,createUserWithEmailAndPassword,signInWithEmailAndPassword,signOut} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import {getFirestore,collection,getDocs,doc,getDoc,setDoc,addDoc,updateDoc,query,where,serverTimestamp,writeBatch} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app), db = getFirestore(app);
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const view = h => $("#app").innerHTML = h;
+
+// Kaptire kòd afilye nan lyen an (?ref=...)
+const r = new URLSearchParams(location.search).get("ref");
+if (r) try { localStorage.setItem("ref", r); } catch (e) {}
+
+let user = null, profil = null, isAdmin = false;
+
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+
+onAuthStateChanged(auth, async u => {
+  user = u; profil = null; isAdmin = false;
+  if (u) {
+    const p = await getDoc(doc(db, "users", u.uid));
+    profil = p.exists() ? p.data() : null;
+    try { isAdmin = (await getDoc(doc(db, "admins", u.uid))).exists(); } catch (e) {}
+  }
+  nav(); route();
+});
+window.addEventListener("hashchange", route);
+
+function nav() {
+  $("#who").textContent = profil ? profil.nom : "";
+  $("#nav").innerHTML = `<a href="#/">Kou yo</a>` + (user
+    ? `<a href="#/mwen">Kou mwen</a><a href="#/afilye">Afilye</a>${isAdmin ? '<a href="#/admin">Admin</a>' : ""}<a href="#" id="out">Soti</a>`
+    : `<a href="#/konekte">Konekte</a>`);
+  const o = $("#out"); if (o) o.onclick = e => { e.preventDefault(); signOut(auth); location.hash = "#/"; };
+}
+
+function route() {
+  const [, p, id] = (location.hash || "#/").split("/");
+  if (!p) return home();
+  if (p === "konekte") return login();
+  if (p === "kou") return kou(id);
+  if (p === "mwen") return mwen();
+  if (p === "afilye") return afilye();
+  if (p === "admin") return admin();
+  if (p === "diplom") return diplom(id);
+  home();
+}
+
+async function home() {
+  view("Chajman...");
+  const s = await getDocs(collection(db, "Cours"));
+  view(s.empty ? `<div class="card">Poko gen kou.</div>` : s.docs.map(d => {
+    const c = d.data();
+    return `<div class="card"><h3>${esc(c.titre)}</h3><p class="m">${esc(c.description)}</p>
+      <span class="pill">${esc(c.prix)} HTG</span> <a class="btn" href="#/kou/${d.id}">Gade kou a</a></div>`;
+  }).join(""));
+}
+
+function login() {
+  view(`<div class="card"><h3>Konekte / Kreye kont</h3>
+    <input id="nom" placeholder="Non konplè (pou kreye kont)">
+    <input id="em" type="email" placeholder="Imèl"><input id="pw" type="password" placeholder="Modpas (6+ karaktè)">
+    <button id="ins">Kreye kont</button> <button id="con" class="alt">Konekte</button><p id="err" class="m"></p></div>`);
+  const err = e => $("#err").textContent = e.message || e;
+  $("#con").onclick = () => signInWithEmailAndPassword(auth, $("#em").value, $("#pw").value).then(() => location.hash = "#/").catch(err);
+  $("#ins").onclick = async () => {
+    try {
+      const nom = $("#nom").value.trim(); if (!nom) return err("Antre non ou.");
+      const c = await createUserWithEmailAndPassword(auth, $("#em").value, $("#pw").value);
+      let ref = null; try { ref = localStorage.getItem("ref"); } catch (e) {}
+      if (ref === c.user.uid) ref = null;
+      await setDoc(doc(db, "users", c.user.uid), {nom, email: c.user.email, referredBy: ref || null, createdAt: serverTimestamp()});
+      profil = {nom}; location.hash = "#/";
+    } catch (e) { err(e); }
+  };
+}
+
+async function kou(id) {
+  const d = await getDoc(doc(db, "Cours", id));
+  if (!d.exists()) return view(`<div class="card">Kou pa jwenn.</div>`);
+  const c = d.data();
+  let ins = null;
+  if (user) { const i = await getDoc(doc(db, "inscriptions", user.uid + "_" + id)); if (i.exists()) ins = i.data(); }
+  let h = `<div class="card"><h2>${esc(c.titre)}</h2><p>${esc(c.description)}</p><span class="pill">${esc(c.prix)} HTG</span></div>`;
+  if (ins) {
+    h += `<div class="card"><h3>Leson yo</h3>` + (c.lecons || []).map((l, i) =>
+      `<p><b>${i + 1}. ${esc(l.titre)}</b><br>${l.video ? `<a href="${esc(l.video)}" target="_blank" rel="noopener">▶ Gade videyo</a>` : ""}</p>`).join("") + `</div>`;
+    h += ins.fini ? `<a class="btn" href="#/diplom/${id}">🎓 Gade diplòm mwen</a>`
+      : `<button id="fini">Mwen fini kou a ✔</button>`;
+  } else if (!user) {
+    h += `<a class="btn" href="#/konekte">Konekte pou achte</a>`;
+  } else {
+    h += `<div class="card"><h3>Achte kou a</h3><p class="m">${esc(PEMAN)}</p>
+      <input id="tx" placeholder="Nimewo tranzaksyon"><button id="achte">Voye demann</button><p id="msg" class="m"></p></div>`;
+  }
+  view(h);
+  const f = $("#fini");
+  if (f) f.onclick = async () => { await updateDoc(doc(db, "inscriptions", user.uid + "_" + id), {fini: true}); location.hash = "#/diplom/" + id; };
+  const a = $("#achte");
+  if (a) a.onclick = async () => {
+    const tx = $("#tx").value.trim(); if (!tx) return $("#msg").textContent = "Antre nimewo tranzaksyon an.";
+    await addDoc(collection(db, "commandes"), {uid: user.uid, nom: profil?.nom || "", coursId: id, titre: c.titre, prix: Number(c.prix) || 0,
+      taux: c.commission ?? TO_KOMISYON_DEFO, txId: tx, referredBy: profil?.referredBy || null, statut: "annatant", createdAt: serverTimestamp()});
+    $("#msg").textContent = "Demann voye! N ap verifye peman an epi aktive kou a.";
+  };
+}
+
+async function mwen() {
+  if (!user) return location.hash = "#/konekte";
+  const s = await getDocs(query(collection(db, "inscriptions"), where("uid", "==", user.uid)));
+  const o = await getDocs(query(collection(db, "commandes"), where("uid", "==", user.uid)));
+  view(`<h3>Kou mwen yo</h3>` + (s.docs.map(d => { const i = d.data();
+    return `<div class="card"><b>${esc(i.titre)}</b> ${i.fini ? '<span class="pill">Fini</span>' : ""}<br><a href="#/kou/${esc(i.coursId)}">Louvri</a></div>`; }).join("") || `<div class="card">Poko gen kou aktif.</div>`)
+    + `<h3>Demann yo</h3>` + o.docs.map(d => { const x = d.data(); return `<div class="card">${esc(x.titre)} — <span class="pill">${esc(x.statut)}</span></div>`; }).join(""));
+}
+
+async function afilye() {
+  if (!user) return location.hash = "#/konekte";
+  const lyen = location.origin + location.pathname + "?ref=" + user.uid;
+  const s = await getDocs(query(collection(db, "commissions"), where("afilye", "==", user.uid)));
+  const rt = await getDocs(query(collection(db, "retraits"), where("afilye", "==", user.uid)));
+  let total = 0, dis = 0; const disIds = [];
+  const rows = s.docs.map(d => { const c = d.data(); total += c.montan; if (c.statut === "disponib") { dis += c.montan; disIds.push(d.id); }
+    return `<div class="card">${esc(c.titre)} — <b>${c.montan} HTG</b> <span class="pill">${esc(c.statut)}</span></div>`; }).join("");
+  const hist = rt.docs.map(d => { const x = d.data();
+    return `<div class="card">Retrè <b>${x.montan} HTG</b> → ${esc(x.telefon)} <span class="pill">${esc(x.statut)}</span></div>`; }).join("");
+  const form = dis >= MIN_RETRE
+    ? `<input id="tel" type="tel" placeholder="Nimewo NatCash/MonCash ou (pou resevwa lajan)">
+       <button id="ret">Mande retrè ${dis} HTG</button><p id="rmsg" class="m"></p>`
+    : `<p class="m">Minimòm pou retire se ${MIN_RETRE} HTG.</p>`;
+  view(`<div class="card"><h3>Lyen afilyasyon ou</h3><input id="ly" readonly value="${esc(lyen)}">
+    <button id="kop">Kopye</button> <button id="pat" class="alt">Pataje</button>
+    <p class="m">Pataje lyen sa a. Chak fwa yon moun ki kreye kont ak lyen ou achte yon kou, ou touche yon komisyon.</p></div>
+    <div class="card"><b>Total touche:</b> ${total} HTG<br><b>Disponib pou retire:</b> ${dis} HTG<br><br>${form}</div>
+    ${hist ? `<h3>Retrè mwen yo</h3>${hist}` : ""}
+    <h3>Komisyon yo</h3>${rows || `<div class="card">Poko gen komisyon.</div>`}`);
+  $("#kop").onclick = () => navigator.clipboard.writeText(lyen).then(() => $("#kop").textContent = "Kopye ✔");
+  $("#pat").onclick = () => navigator.share ? navigator.share({title: "DGCEL ACADÉMIE", url: lyen}) : $("#kop").click();
+  const rb = $("#ret");
+  if (rb) rb.onclick = async () => {
+    const tel = $("#tel").value.trim();
+    if (tel.replace(/\D/g, "").length < 8) return $("#rmsg").textContent = "Antre yon nimewo valid.";
+    rb.disabled = true;
+    try {
+      const rref = doc(collection(db, "retraits")), bt = writeBatch(db);
+      bt.set(rref, {afilye: user.uid, nom: profil?.nom || "", telefon: tel, montan: dis, statut: "annatant", createdAt: serverTimestamp()});
+      disIds.forEach(id => bt.update(doc(db, "commissions", id), {statut: "retrait", retraitId: rref.id}));
+      await bt.commit(); afilye();
+    } catch (e) { $("#rmsg").textContent = e.message; rb.disabled = false; }
+  };
+}
+
+async function admin() {
+  if (!isAdmin) return view(`<div class="card">Aksè refize.</div>`);
+  const s = await getDocs(query(collection(db, "commandes"), where("statut", "==", "annatant")));
+  const rs = await getDocs(query(collection(db, "retraits"), where("statut", "==", "annatant")));
+  const ret = await Promise.all(rs.docs.map(async d => {
+    const cs = await getDocs(query(collection(db, "commissions"), where("retraitId", "==", d.id)));
+    return {d, cs, total: cs.docs.reduce((a, c) => a + c.data().montan, 0)};
+  }));
+  view(`<h3>Retrè afilye yo</h3>` + (ret.map(({d, total}) => { const x = d.data();
+    return `<div class="card"><b>${esc(x.nom)}</b> — <b>${total} HTG</b> (verifye)<br>Voye sou: ${esc(x.telefon)}<br>
+      <button data-r="${d.id}">Mwen peye l ✔</button></div>`; }).join("") || `<div class="card">Pa gen retrè annatant.</div>`)
+    + `<h3>Demann peman kou</h3>` + (s.docs.map(d => { const x = d.data();
+    return `<div class="card"><b>${esc(x.nom)}</b> — ${esc(x.titre)} (${x.prix} HTG)<br>Tx: ${esc(x.txId)}<br>
+      <button data-id="${d.id}">Apwouve</button></div>`; }).join("") || `<div class="card">Anyen annatant.</div>`));
+  document.querySelectorAll("button[data-id]").forEach(b => b.onclick = async () => {
+    const d = s.docs.find(z => z.id === b.dataset.id), x = d.data(), bt = writeBatch(db);
+    bt.update(doc(db, "commandes", d.id), {statut: "apwouve"});
+    bt.set(doc(db, "inscriptions", x.uid + "_" + x.coursId), {uid: x.uid, nom: x.nom, coursId: x.coursId, titre: x.titre, fini: false, createdAt: serverTimestamp()});
+    if (x.referredBy) bt.set(doc(db, "commissions", d.id), {afilye: x.referredBy, etidyan: x.uid, coursId: x.coursId, titre: x.titre,
+      montan: Math.round(x.prix * (x.taux ?? TO_KOMISYON_DEFO) / 100), statut: "disponib", createdAt: serverTimestamp()});
+    await bt.commit(); admin();
+  });
+  document.querySelectorAll("button[data-r]").forEach(b => b.onclick = async () => {
+    const r = ret.find(z => z.d.id === b.dataset.r), bt = writeBatch(db);
+    bt.update(doc(db, "retraits", r.d.id), {statut: "peye", paidAt: serverTimestamp()});
+    r.cs.docs.forEach(c => bt.update(doc(db, "commissions", c.id), {statut: "peye"}));
+    await bt.commit(); admin();
+  });
+}
+
+async function diplom(id) {
+  if (!user) return location.hash = "#/konekte";
+  const i = await getDoc(doc(db, "inscriptions", user.uid + "_" + id));
+  if (!i.exists() || !i.data().fini) return view(`<div class="card">Ou poko fini kou sa a.</div>`);
+  const x = i.data(), nimewo = "DGCEL-" + (user.uid.slice(0, 5) + id.slice(0, 4)).toUpperCase();
+  view(`<div class="dip card"><h1>CERTIFICAT / DIPLÒM</h1><p>DGCEL ACADÉMIE sètifye ke</p><h2>${esc(x.nom)}</h2>
+    <p>te konplete avèk siksè kou</p><h3>${esc(x.titre)}</h3><p class="m">Dat: ${new Date().toLocaleDateString("fr-FR")} · No: ${nimewo}</p></div>
+    <button class="noprint" onclick="window.print()">Enprime / Sove an PDF</button>`);
+}
+</script>
+</body>
+</html>
