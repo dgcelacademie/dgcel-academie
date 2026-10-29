@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ht"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tès Firebase</title>
+<style>body{font-family:system-ui,sans-serif;padding:16px;max-width:640px;margin:0 auto}pre{white-space:pre-wrap;word-break:break-word;background:#f1f4f9;padding:12px;border-radius:8px}</style>
+</head><body>
+<h3>Tès Firebase (v3)</h3>
+<pre id="out">Ap tcheke...</pre>
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import {getFirestore,collection,getDocsFromServer,doc,getDocFromServer} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+const cfg = {
+  apiKey: "AIzaSyCrCt_MfpNpnVLIWcIGTYSoZKewqOtGeZU",
+  authDomain: "dgcel-acad-2026.firebaseapp.com",
+  projectId: "dgcel-acad-2026",
+  storageBucket: "dgcel-acad-2026.firebasestorage.app",
+  messagingSenderId: "415020124018",
+  appId: "1:415020124018:web:fe6aaaffd8ff21dc64ffeb"
+};
+const out = document.getElementById("out");
+const log = t => out.textContent += "\n" + t;
+out.textContent = "projet: " + cfg.projectId + "\nonline: " + navigator.onLine;
+try {
+  const db = getFirestore(initializeApp(cfg));
+  try {
+    const s = await getDocsFromServer(collection(db, "Cours"));
+    log("Cours (koleksyon): " + s.size + " dokiman");
+    s.forEach(d => log(" - " + d.id + " => " + JSON.stringify(d.data())));
+  } catch (e) { log("ERÈ koleksyon: " + (e.code || "") + " " + e.message); }
+  try {
+    const d = await getDocFromServer(doc(db, "Cours", "video-fruit-ia"));
+    log("Dokiman video-fruit-ia egziste: " + d.exists());
+  } catch (e) { log("ERÈ dokiman: " + (e.code || "") + " " + e.message); }
+} catch (e) { log("ERÈ jeneral: " + e.message); }
+log("Fini.");
+</script>
+</body></html>
