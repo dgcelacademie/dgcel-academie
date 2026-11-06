@@ -42,13 +42,13 @@ const firebaseConfig = {
   appId: "1:415020124018:web:fe6aaaffd8ff21dc64ffeb"
 };
 const PEMAN = "Peye ak NatCash: voye montan kou a sou nimewo 509 3599 6549 (DGCEL). Apre sa, antre nimewo tranzaksyon an anba a.";
-const TO_KOMISYON_DEFO = 30; // % si kou a pa gen chan "commission"
+const KOMISYON_FIKS = 500; // HTG pou chak vant (fiks)
 const MIN_RETRE = 500; // minimòm retrè an HTG
 /* ========================================= */
 
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {getAuth,onAuthStateChanged,createUserWithEmailAndPassword,signInWithEmailAndPassword,signOut} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import {getFirestore,collection,getDocs,getDocsFromServer,doc,getDoc,setDoc,addDoc,updateDoc,query,where,serverTimestamp,writeBatch} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import {getFirestore,collection,getDocs,getDocsFromServer,doc,getDoc,setDoc,addDoc,updateDoc,arrayUnion,query,where,serverTimestamp,writeBatch} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app), db = getFirestore(app);
@@ -126,6 +126,17 @@ function login() {
   };
 }
 
+function ytId(u) {
+  const m = String(u || "").match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|live\/|embed\/|shorts\/))([\w-]{11})/);
+  return m ? m[1] : null;
+}
+function videyo(u) {
+  if (!u) return "";
+  const id = ytId(u);
+  return id ? `<div style="position:relative;padding-top:56.25%;margin-top:8px"><iframe src="https://www.youtube-nocookie.com/embed/${id}?rel=0" style="position:absolute;inset:0;width:100%;height:100%;border:0;border-radius:10px" allow="encrypted-media; picture-in-picture" allowfullscreen></iframe></div>`
+    : `<a href="${esc(u)}" target="_blank" rel="noopener">▶ Gade videyo</a>`;
+}
+
 async function kou(id) {
   const d = await getDoc(doc(db, "Cours", id));
   if (!d.exists()) return view(`<div class="card">Kou pa jwenn.</div>`);
@@ -135,7 +146,7 @@ async function kou(id) {
   let h = `<div class="card"><h2>${esc(c.titre)}</h2><p>${esc(c.description)}</p><span class="pill">${esc(c.prix)} HTG</span></div>`;
   if (ins) {
     h += `<div class="card"><h3>Leson yo</h3>` + (c.lecons || []).map((l, i) =>
-      `<p><b>${i + 1}. ${esc(l.titre)}</b><br>${l.video ? `<a href="${esc(l.video)}" target="_blank" rel="noopener">▶ Gade videyo</a>` : ""}</p>`).join("") + `</div>`;
+      `<div style="margin-bottom:18px"><b>${i + 1}. ${esc(l.titre)}</b><br>${videyo(l.video)}</div>`).join("") + `</div>`;
     h += ins.fini ? `<a class="btn" href="#/diplom/${id}">🎓 Gade diplòm mwen</a>`
       : `<button id="fini">Mwen fini kou a ✔</button>`;
   } else if (!user) {
@@ -151,7 +162,7 @@ async function kou(id) {
   if (a) a.onclick = async () => {
     const tx = $("#tx").value.trim(); if (!tx) return $("#msg").textContent = "Antre nimewo tranzaksyon an.";
     await addDoc(collection(db, "commandes"), {uid: user.uid, nom: profil?.nom || "", coursId: id, titre: c.titre, prix: Number(c.prix) || 0,
-      taux: c.commission ?? TO_KOMISYON_DEFO, txId: tx, referredBy: profil?.referredBy || null, statut: "annatant", createdAt: serverTimestamp()});
+      txId: tx, referredBy: profil?.referredBy || null, statut: "annatant", createdAt: serverTimestamp()});
     $("#msg").textContent = "Demann voye! N ap verifye peman an epi aktive kou a.";
   };
 }
@@ -209,18 +220,28 @@ async function admin() {
     const cs = await getDocs(query(collection(db, "commissions"), where("retraitId", "==", d.id)));
     return {d, cs, total: cs.docs.reduce((a, c) => a + c.data().montan, 0)};
   }));
-  view(`<h3>Retrè afilye yo</h3>` + (ret.map(({d, total}) => { const x = d.data();
+  const cs0 = await getDocsFromServer(collection(db, "Cours"));
+  const lf = `<h3>Ajoute yon leson</h3><div class="card"><select id="lc">${cs0.docs.map(d => `<option value="${d.id}">${esc(d.data().titre)}</option>`).join("")}</select>
+    <input id="lt" placeholder="Tit leson an"><input id="lv" placeholder="Lyen YouTube"><button id="lb">Ajoute leson an</button><p id="lm" class="m"></p>
+    ${cs0.docs.map(d => `<p class="m"><b>${esc(d.data().titre)}</b>: ${(d.data().lecons || []).length} leson</p>`).join("")}</div>`;
+  view(lf + `<h3>Retrè afilye yo</h3>` + (ret.map(({d, total}) => { const x = d.data();
     return `<div class="card"><b>${esc(x.nom)}</b> — <b>${total} HTG</b> (verifye)<br>Voye sou: ${esc(x.telefon)}<br>
       <button data-r="${d.id}">Mwen peye l ✔</button></div>`; }).join("") || `<div class="card">Pa gen retrè annatant.</div>`)
     + `<h3>Demann peman kou</h3>` + (s.docs.map(d => { const x = d.data();
     return `<div class="card"><b>${esc(x.nom)}</b> — ${esc(x.titre)} (${x.prix} HTG)<br>Tx: ${esc(x.txId)}<br>
       <button data-id="${d.id}">Apwouve</button></div>`; }).join("") || `<div class="card">Anyen annatant.</div>`));
+  $("#lb").onclick = async () => {
+    const t = $("#lt").value.trim(), v = $("#lv").value.trim(), m = $("#lm");
+    if (!t || !v) return m.textContent = "Ranpli tit la ak lyen an.";
+    try { await updateDoc(doc(db, "Cours", $("#lc").value), {lecons: arrayUnion({titre: t, video: v})}); m.textContent = "Leson an ajoute ✔"; admin(); }
+    catch (e) { m.textContent = "Erè: " + (e.code || e.message); }
+  };
   document.querySelectorAll("button[data-id]").forEach(b => b.onclick = async () => {
     const d = s.docs.find(z => z.id === b.dataset.id), x = d.data(), bt = writeBatch(db);
     bt.update(doc(db, "commandes", d.id), {statut: "apwouve"});
     bt.set(doc(db, "inscriptions", x.uid + "_" + x.coursId), {uid: x.uid, nom: x.nom, coursId: x.coursId, titre: x.titre, fini: false, createdAt: serverTimestamp()});
     if (x.referredBy) bt.set(doc(db, "commissions", d.id), {afilye: x.referredBy, etidyan: x.uid, coursId: x.coursId, titre: x.titre,
-      montan: Math.round(x.prix * (x.taux ?? TO_KOMISYON_DEFO) / 100), statut: "disponib", createdAt: serverTimestamp()});
+      montan: KOMISYON_FIKS, statut: "disponib", createdAt: serverTimestamp()});
     await bt.commit(); admin();
   });
   document.querySelectorAll("button[data-r]").forEach(b => b.onclick = async () => {
