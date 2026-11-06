@@ -1,4 +1,4 @@
-const CACHE = "dgcel-v2";
+const CACHE = "dgcel-v3";
 const SHELL = ["./", "index.html", "manifest.json"];
 self.addEventListener("install", e => e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL))));
 self.addEventListener("activate", e => e.waitUntil(
